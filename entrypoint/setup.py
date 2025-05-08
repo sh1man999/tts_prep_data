@@ -9,4 +9,4 @@ def create_app() -> Typer:
 
 def configure_app(app: Typer) -> None:
     app.add_typer(text_processor_commands.app, name="text_processor")
-    app.add_typer(text_generator.app, name="text_generator" )
+    app.add_typer(text_generator_commands.app, name="text_generator" )

@@ -77,48 +77,38 @@ def process_text_with_ollama(
     Возвращает словарь с метрикой качества и обработанным текстом.
     """
     if not text_to_process or not text_to_process.strip():
-        return {"quality_score": 0.0, "processed_text": "", "error": "Input text is empty"}
+        return {"quality_score": 0.0, "processed_text": ""}
 
-    try:
-        response = ollama_client.chat(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text_to_process},
-            ],
-            options={"temperature": temperature}
-        )
-        content = response['message']['content']
+    response = ollama_client.chat(
+        model=model_name,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text_to_process},
+        ],
+        options={"temperature": temperature}
+    )
+    content = response['message']['content']
 
-        # Попытка очистить ответ от возможных markdown-блоков JSON
-        cleaned_content = content.strip()
-        cleaned_content = cleaned_content.split("</think>")[1]
-        if cleaned_content.startswith("```json"):
-            cleaned_content = cleaned_content[7:]
-            if cleaned_content.endswith("```"):
-                cleaned_content = cleaned_content[:-3]
-        elif cleaned_content.startswith("```"):
-            cleaned_content = cleaned_content[3:]
-            if cleaned_content.endswith("```"):
-                cleaned_content = cleaned_content[:-3]
+    # Попытка очистить ответ от возможных markdown-блоков JSON
+    cleaned_content = content.strip()
+    cleaned_content = cleaned_content.split("</think>")[1]
+    if cleaned_content.startswith("```json"):
+        cleaned_content = cleaned_content[7:]
+        if cleaned_content.endswith("```"):
+            cleaned_content = cleaned_content[:-3]
+    elif cleaned_content.startswith("```"):
+        cleaned_content = cleaned_content[3:]
+        if cleaned_content.endswith("```"):
+            cleaned_content = cleaned_content[:-3]
 
-        cleaned_content = cleaned_content.strip()
+    cleaned_content = cleaned_content.strip()
 
-        result = json.loads(cleaned_content)
-        quality_score = float(result.get("quality_score", 0.0))
-        summary = result.get("summary", "")
-        processed_text = result.get("processed_text", text_to_process)  # Возвращаем исходный текст при ошибке ключа
+    result = json.loads(cleaned_content)
+    quality_score = float(result.get("quality_score", 0.0))
+    summary = result.get("summary", "")
+    processed_text = result.get("processed_text", text_to_process)  # Возвращаем исходный текст при ошибке ключа
 
-        return {"quality_score": quality_score, "processed_text": processed_text, "summary": summary, "error": None}
-
-    except json.JSONDecodeError as e:
-        error_message = f"Failed to parse JSON response from Ollama: {e}\nRaw response: '{content}'"
-        typer.echo(f"Ошибка декодирования JSON: {error_message}")
-        return {"quality_score": 0.0, "processed_text": text_to_process, "error": error_message}
-    except Exception as e:
-        error_message = f"Error interacting with Ollama: {e}"
-        typer.echo(f"Ошибка взаимодействия с Ollama: {error_message}")
-        return {"quality_score": 0.0, "processed_text": text_to_process, "error": error_message}
+    return {"quality_score": quality_score, "processed_text": processed_text, "summary": summary}
 
 
 def process_excel_file(
@@ -156,16 +146,8 @@ def process_excel_file(
 
         typer.echo(f"\nОбработка строки {index + 1}/{total_rows}...")
         if not original_text.strip():
-            typer.echo("Пропуск пустой строки.")
-            results.append({
-                'Original_Text': original_text,
-                'Quality_Score': None,
-                'Processed_Text': '',
-                'Error': 'Input text was empty or NaN'
-            })
             continue
 
-        # print(f"Исходный текст: \"{original_text[:100]}...\"") # Для отладки можно выводить часть текста
         ollama_result = process_text_with_ollama(
             original_text,
             ollama_client,
@@ -177,12 +159,8 @@ def process_excel_file(
             'Quality_Score': ollama_result['quality_score'],
             'Processed_Text': ollama_result['processed_text'],
             'Summary': ollama_result['summary'],
-            'Error': ollama_result['error']
         })
-        if ollama_result['error']:
-            typer.echo(f"Строка {index + 1} обработана с ошибкой: {ollama_result['error']}")
-        else:
-            typer.echo(f"Строка {index + 1} обработана. Качество: {ollama_result['quality_score']:.2f}")
+        typer.echo(f"Строка {index + 1} обработана. Качество: {ollama_result['quality_score']:.2f}")
 
     results_df = pd.DataFrame(results)
     try:

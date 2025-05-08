@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Optional
+from typing import List
 
 import ollama
 import pandas as pd
@@ -59,6 +59,7 @@ SYSTEM_PROMPT = """
 /no_think
 """
 
+
 def generate_dialogue_with_ollama(
         topic: str,
         ollama_client: ollama.Client,
@@ -89,7 +90,7 @@ def generate_dialogue_with_ollama(
         if len(think_parts) > 1:
             cleaned_content = think_parts[1]
         else:
-            cleaned_content = think_parts[0]  # Берем первую часть, если вторая пустая
+            cleaned_content = think_parts[0]
 
     if cleaned_content.startswith("```json"):
         cleaned_content = cleaned_content[7:]
@@ -117,7 +118,6 @@ def generate_dialogue_with_ollama(
     return result
 
 
-
 def generate_multiple_topics(
         topics_list: List[str],
         output_excel_path: str,
@@ -130,7 +130,6 @@ def generate_multiple_topics(
     Генерирует диалоги для нескольких тем и сохраняет результаты в Excel файл.
     """
     results_summary = []
-    all_pairs_data = []
     total_topics_count = len(topics_list)
     typer.echo(f"Начало генерации диалогов для {total_topics_count} тем...")
 
@@ -148,18 +147,31 @@ def generate_multiple_topics(
             temperature=temperature
         )
 
+
         results_summary.append({
             'Topic': current_topic,
             'Pairs_Generated': len(dialogue_result.pairs),
         })
 
-        for pair in dialogue_result.pairs:
-            all_pairs_data.append({
-                'Topic': current_topic,
-                'Pair_ID': pair.id,
+        # Create dataframe with dialogue pairs for this topic
+        pairs_data = []
+        for i, pair in enumerate(dialogue_result.pairs):
+            pairs_data.append({
+                'Pair_Number': pair.id,
                 'User_Query': pair.user_query,
                 'AI_Response': pair.ai_response
+
             })
+
+        topic_filename = f"{current_topic.replace(' ', '_')[:30]}.xlsx"
+        topic_filepath = os.path.join(os.path.dirname(output_excel_path), topic_filename)
+
+        # Save to topic-specific Excel file
+        if pairs_data:
+            pairs_df = pd.DataFrame(pairs_data)
+            pairs_df.to_excel(topic_filepath, index=False)
+            typer.echo(f"Диалоги для темы '{current_topic}' сохранены в {topic_filepath}")
+
 
         typer.echo(typer.style(
             f"Тема '{current_topic}' обработана успешно. Сгенерировано пар: {len(dialogue_result.pairs)}",
@@ -176,27 +188,6 @@ def generate_multiple_topics(
         topics_df = pd.DataFrame(results_summary)
         topics_df.to_excel(writer, sheet_name='Topics_Summary', index=False)
 
-        pairs_df = pd.DataFrame(all_pairs_data)
-        pairs_df.to_excel(writer, sheet_name='Dialogue_Pairs', index=False)
-
     typer.echo(typer.style(f"\nГенерация завершена. Результаты сохранены в {output_excel_path}",
                            fg=typer.colors.BRIGHT_GREEN))
 
-    return all_pairs_data
-
-
-def save_dialogue_as_json(dialogue_data: DialogueGeneration, output_json_path: str):
-    try:
-        output_dir = os.path.dirname(output_json_path)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-
-        dialogue_dict = dialogue_data.model_dump()
-        json_string = json.dumps(dialogue_dict, indent=2, ensure_ascii=False)
-        with open(output_json_path, 'w', encoding='utf-8') as f:
-            f.write(json_string)
-        typer.echo(typer.style(f"Диалог для темы '{dialogue_data.topic}' успешно сохранен в {output_json_path}",
-                               fg=typer.colors.GREEN))
-    except Exception as e:
-        typer.echo(
-            typer.style(f"Ошибка сохранения диалога в JSON для темы '{dialogue_data.topic}': {e}", fg=typer.colors.RED))

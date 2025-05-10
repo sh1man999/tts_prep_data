@@ -63,6 +63,9 @@ class DialoguePair(BaseModel):
     user_query: str = Field(..., description="Запрос пользователя")
     ai_response: str = Field(..., description="Ответ ИИ на запрос")
 
+    def to_jsonl(self):
+        return self.model_dump_json()+'\n'
+
 
 class DialogueGeneration(BaseModel):
     topic: str = Field(..., description="Тема диалогов")
@@ -116,16 +119,15 @@ def generate_dialogue_with_ollama(
 
 def generate_multiple_topics(
         topics_list: List[str],
-        output_excel_path: str,
+        output_path: str,
         ollama_client: ollama.Client,
         model_name: str,
         num_samples: int = 5,
         temperature: float = 0.7
 ):
     """
-    Генерирует диалоги для нескольких тем и сохраняет результаты в Excel файл.
+    Генерирует диалоги для нескольких тем и сохраняет результаты в jsonl файл.
     """
-    results_summary = []
     total_topics_count = len(topics_list)
     typer.echo(f"Начало генерации диалогов для {total_topics_count} тем...")
 
@@ -144,46 +146,10 @@ def generate_multiple_topics(
         )
 
 
-        results_summary.append({
-            'Topic': current_topic,
-            'Pairs_Generated': len(dialogue_result.pairs),
-        })
+        topic_filename = f"{current_topic.replace(' ', '_')[:30]}.jsonl"
+        topic_filepath = os.path.join(output_path, topic_filename)
+        with open(topic_filepath, "w") as topic_file:
+            for pair in dialogue_result.pairs:
+                topic_file.write(pair.to_jsonl())
 
-        # Create dataframe with dialogue pairs for this topic
-        pairs_data = []
-        for i, pair in enumerate(dialogue_result.pairs):
-            pairs_data.append({
-                'Pair_Number': pair.id,
-                'User_Query': pair.user_query,
-                'AI_Response': pair.ai_response
-
-            })
-
-        topic_filename = f"{current_topic.replace(' ', '_')[:30]}.xlsx"
-        topic_filepath = os.path.join(os.path.dirname(output_excel_path), topic_filename)
-
-        # Save to topic-specific Excel file
-        if pairs_data:
-            pairs_df = pd.DataFrame(pairs_data)
-            pairs_df.to_excel(topic_filepath, index=False)
-            typer.echo(f"Диалоги для темы '{current_topic}' сохранены в {topic_filepath}")
-
-
-        typer.echo(typer.style(
-            f"Тема '{current_topic}' обработана успешно. Сгенерировано пар: {len(dialogue_result.pairs)}",
-            fg=typer.colors.GREEN))
-        if dialogue_result.pairs:
-            first_pair = dialogue_result.pairs[0]
-            typer.echo(
-                f"Пример:\nПользователь: {first_pair.user_query[:70]}...\nИИ: {first_pair.ai_response[:70]}...")
-    output_dir = os.path.dirname(output_excel_path)
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-
-    with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
-        topics_df = pd.DataFrame(results_summary)
-        topics_df.to_excel(writer, sheet_name='Topics_Summary', index=False)
-
-    typer.echo(typer.style(f"\nГенерация завершена. Результаты сохранены в {output_excel_path}",
-                           fg=typer.colors.BRIGHT_GREEN))
-
+        typer.echo(typer.style(f"Диалоги для темы '{current_topic}' сохранены в {topic_filepath}", fg=typer.colors.GREEN))

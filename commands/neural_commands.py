@@ -39,11 +39,10 @@ def generate_text(
         samples: Annotated[int, typer.Option(prompt=True, help="Количество пар запрос-ответ для каждой темы.", show_default=True)] = 5,
         ollama_model: Annotated[str, typer.Option(prompt=True, show_default=True)] = "qwen3:30b-a3b",
         ollama_base_url: Annotated[str, typer.Option(prompt=True, show_default=True)] = "http://localhost:11434",
-        output_excel: Annotated[str, typer.Option(prompt=True, help="Путь к Excel файлу для сохранения общих результатов.", show_default=True)] = "output/generated_dialogues.xlsx",
         temperature: Annotated[float, typer.Option(prompt=True, min=0.0, max=1.0, help="Температура генерации (0.0-1.0).", show_default=True)] = 0.7,
 ):
     typer.echo(typer.style(f"Параметры генерации:", bold=True))
-
+    output_path = os.path.join(BASE_DIR,"datasets")
     ollama_client = get_ollama_client(ollama_base_url, ollama_model)
     topics_to_process = []
     if topic_arg:
@@ -68,7 +67,7 @@ def generate_text(
 
     generate_multiple_topics(
         topics_to_process,
-        output_excel,
+        output_path,
         ollama_client,
         num_samples=samples,
         model_name=ollama_model,

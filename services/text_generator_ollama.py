@@ -8,20 +8,8 @@ import typer
 from pydantic import BaseModel, Field
 
 
-class DialoguePair(BaseModel):
-    id: int = Field(..., description="Уникальный идентификатор пары")
-    user_query: str = Field(..., description="Запрос пользователя")
-    ai_response: str = Field(..., description="Ответ ИИ на запрос")
-
-
-class DialogueGeneration(BaseModel):
-    topic: str = Field(..., description="Тема диалогов")
-    pairs: List[DialoguePair] = Field(..., description="Пары запрос-ответ")
-
-
 SYSTEM_PROMPT = """
 Ты - эксперт по генерации реалистичных диалогов между пользователем и ИИ-ассистентом на русском языке для тренировки систем Text-to-Speech (TTS).
-
 Твоя задача: сгенерировать указанное количество пар "запрос пользователя - ответ ИИ" на заданную тему и вернуть результат в формате JSON.
 
 Требования к запросам пользователя:
@@ -36,10 +24,21 @@ SYSTEM_PROMPT = """
 - Характерные для ИИ речевые обороты и стилистика
 - Информативность и полезность
 - Логическая завершенность
+- Весь текст ответа ИИ должен быть представлен исключительно словами на русском языке, имитируя естественное звучание при чтении вслух. Это означает:
+    - Транслитерацию иностранных названий, брендов и аббревиатур (например, "iOS" -> "ай о эс", "YouTube" -> "ютуб", "Wi-Fi" -> "вай-фай").
+    - Написание всех чисел прописью, включая целые, дробные, порядковые и даты. (Например: "42" -> "сорок два"; "01.03.2025" -> "первое марта две тысячи двадцать пятого года"; "15.1" -> "пятнадцать точка один"; "1/2" -> "одна вторая").
+    - Полное словесное описание всех математических формул, выражений, отдельных символов и их компонентов:
+        - Каждая буква, обозначающая переменную или константу (например, из латинского или греческого алфавита), произносится как соответствующее название буквы или звука на русском языке (например, "x" -> "икс", "r" -> "эр", "S" -> "эс", "π" -> "пи", "α" -> "альфа", "v" -> "вэ").
+        - Все математические знаки, операторы (сложение, вычитание, равенство и т.д.) и символы (например, корень, интеграл) пишутся словами (например, "+" -> "плюс", "=" -> "равно", "√" -> "квадратный корень из", "/" (в дроби) -> "деленое на" или в составе дроби как "одна вторая").
+        - Показатели степени (экспоненты) всегда произносятся словами (например, "x²" должно быть представлено как "икс в квадрате" или "икс во второй степени"; "r³" -> "эр в кубе" или "эр в третьей степени"). Индексы у переменных также произносятся словами (например "v1" -> "вэ один").
+        - Формулы целиком должны быть преобразованы в связные русскоязычные фразы, полностью избегая использования математических символов (типа π, r, S, ²), цифр в их знаковой записи или буквенных обозначений переменных в исходном виде (кроме как в примерах транслитерации). Например, выражение "S = πr²" должно быть передано как "эс равно пи эр в квадрате". Другой пример: "a=(v₂-v₁)/t" должно стать "а равно вэ два минус вэ один деленное на тэ".
+
+Дополнительные требования:
+- В 30% выходных данных должны присутствовать англицизмы, произнесенные по-русски (например, "iOS" -> "ай о эс", "Wi-Fi" -> "вай-фай", "YouTube" -> "ютуб")
+- В 30% выходных данных должны присутствовать числовые представления, произнесенные словами (например, "01.03.2025" -> "первое марта две тысячи двадцать пятого", "15.1" -> "пятнадцать точка один", "42" -> "сорок два")
 
 Твой ответ должен быть строго валидным JSON объектом следующей структуры:
 {
-  "topic": "Заданная тема",
   "pairs": [
     {
       "id": 1,
@@ -51,7 +50,7 @@ SYSTEM_PROMPT = """
       "user_query": "Текст запроса пользователя",
       "ai_response": "Текст ответа ИИ"
     }
-    // и так далее до 5 пар
+    // и так далее
   ]
 }
 
@@ -59,12 +58,25 @@ SYSTEM_PROMPT = """
 /no_think
 """
 
+class DialoguePair(BaseModel):
+    id: int = Field(..., description="Уникальный идентификатор пары")
+    user_query: str = Field(..., description="Запрос пользователя")
+    ai_response: str = Field(..., description="Ответ ИИ на запрос")
+
+
+class DialogueGeneration(BaseModel):
+    topic: str = Field(..., description="Тема диалогов")
+    pairs: List[DialoguePair] = Field(..., description="Пары запрос-ответ")
+
+class TextGeneratedLLMResult(BaseModel):
+    pairs: List[DialoguePair] = Field(..., description="Пары запрос-ответ")
+
 
 def generate_dialogue_with_ollama(
         topic: str,
         ollama_client: ollama.Client,
+        model_name: str,
         num_samples: int = 5,
-        model_name: str = "qwen3:30b",
         temperature: float = 0.7
 ) -> DialogueGeneration:
     if not topic or not topic.strip():
@@ -80,32 +92,16 @@ def generate_dialogue_with_ollama(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        options={"temperature": temperature}
+        options={"temperature": temperature},
+        format=TextGeneratedLLMResult.model_json_schema()
     )
     content = response['message']['content']
 
-    cleaned_content = content.strip()
-    if "</think>" in cleaned_content:
-        think_parts = cleaned_content.split("</think>")
-        if len(think_parts) > 1:
-            cleaned_content = think_parts[1]
-        else:
-            cleaned_content = think_parts[0]
 
-    if cleaned_content.startswith("```json"):
-        cleaned_content = cleaned_content[7:]
-        if cleaned_content.endswith("```"):
-            cleaned_content = cleaned_content[:-3]
-    elif cleaned_content.startswith("```"):
-        cleaned_content = cleaned_content[3:]
-        if cleaned_content.endswith("```"):
-            cleaned_content = cleaned_content[:-3]
-
-    cleaned_content = cleaned_content.strip()
-
-    json_data = json.loads(cleaned_content)
+    typer.echo(content)
+    json_data = json.loads(content)
     result = DialogueGeneration(
-        topic=json_data.get("topic", topic),
+        topic=topic,
         pairs=[
             DialoguePair(
                 id=pair.get("id", i + 1),

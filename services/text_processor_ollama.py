@@ -4,6 +4,7 @@ import json
 import os
 
 import typer
+from pydantic import BaseModel
 
 # Системный промпт для Ollama
 SYSTEM_PROMPT = """
@@ -65,6 +66,10 @@ Now, process the text I will provide.
 /no_think
 """
 
+class TextProcessedLLMResult(BaseModel):
+    quality_score: float
+    processed_text: str
+    summary: str
 
 def process_text_with_ollama(
         text_to_process: str,
@@ -72,10 +77,6 @@ def process_text_with_ollama(
         model_name,
         temperature: float = 0.3
 ):
-    """
-    Отправляет текст в Ollama для оценки качества и обработки.
-    Возвращает словарь с метрикой качества и обработанным текстом.
-    """
     if not text_to_process or not text_to_process.strip():
         return {"quality_score": 0.0, "processed_text": ""}
 
@@ -85,25 +86,13 @@ def process_text_with_ollama(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": text_to_process},
         ],
-        options={"temperature": temperature}
+        options={"temperature": temperature},
+        format=TextProcessedLLMResult.model_json_schema()
     )
     content = response['message']['content']
 
-    # Попытка очистить ответ от возможных markdown-блоков JSON
-    cleaned_content = content.strip()
-    cleaned_content = cleaned_content.split("</think>")[1]
-    if cleaned_content.startswith("```json"):
-        cleaned_content = cleaned_content[7:]
-        if cleaned_content.endswith("```"):
-            cleaned_content = cleaned_content[:-3]
-    elif cleaned_content.startswith("```"):
-        cleaned_content = cleaned_content[3:]
-        if cleaned_content.endswith("```"):
-            cleaned_content = cleaned_content[:-3]
-
-    cleaned_content = cleaned_content.strip()
-
-    result = json.loads(cleaned_content)
+    result = json.loads(content)
+    typer.echo(result)
     quality_score = float(result.get("quality_score", 0.0))
     summary = result.get("summary", "")
     processed_text = result.get("processed_text", text_to_process)  # Возвращаем исходный текст при ошибке ключа

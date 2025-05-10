@@ -29,7 +29,7 @@ def jsonl_to_audio(
         limit: Annotated[int, typer.Option(prompt=True, show_default=True)] = 5,
         audio_format: Annotated[str, typer.Option(prompt=True, show_default=True)] = ".wav",  # .wav .mp3
 ):
-    input_file_path = os.path.join(BASE_DIR, "datasets", input_file_name)
+    input_file_path = os.path.join(BASE_DIR, "payload_datasets", input_file_name)
     source = input_file_name.replace(".jsonl", "")
     client = get_client()
     voice = get_voice(client, voice_name.value)

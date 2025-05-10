@@ -1,10 +1,11 @@
+import json
+
 import ollama
 import pandas as pd
-import json
-import os
-
 import typer
 from pydantic import BaseModel
+
+from models.preprocessed_text import NeuralProcessedText
 
 # Системный промпт для Ollama
 SYSTEM_PROMPT = """
@@ -66,19 +67,22 @@ Now, process the text I will provide.
 /no_think
 """
 
+
 class TextProcessedLLMResult(BaseModel):
     quality_score: float
     processed_text: str
     summary: str
+
 
 def process_text_with_ollama(
         text_to_process: str,
         ollama_client: ollama.Client,
         model_name,
         temperature: float = 0.3
-):
-    if not text_to_process or not text_to_process.strip():
-        return {"quality_score": 0.0, "processed_text": ""}
+) -> NeuralProcessedText:
+    text_to_process = text_to_process.strip()
+    if not text_to_process:
+        raise ValueError('No text provided.')
 
     response = ollama_client.chat(
         model=model_name,
@@ -96,66 +100,35 @@ def process_text_with_ollama(
     quality_score = float(result.get("quality_score", 0.0))
     summary = result.get("summary", "")
     processed_text = result.get("processed_text", text_to_process)  # Возвращаем исходный текст при ошибке ключа
+    return NeuralProcessedText(
+        quality_score=quality_score,
+        processed_text=processed_text,
+        summary=summary,
+        original_text=text_to_process,
+    )
 
-    return {"quality_score": quality_score, "processed_text": processed_text, "summary": summary}
 
-
-def process_excel_file(
-        input_excel_path: str,
-        output_excel_path: str,
+def process_jsonl_file(
+        jsonl_file_path: str,
         text_column_name: str,
         ollama_client: ollama.Client,
-        model_name: str = "llama3"
+        model_name: str
 ):
-    """
-    Читает Excel файл, обрабатывает текст из указанной колонки с помощью Ollama
-    и сохраняет результаты в новый Excel файл.
-    """
-    try:
-        df = pd.read_excel(input_excel_path)
-        typer.echo(f"Файл {input_excel_path} успешно прочитан.")
-    except FileNotFoundError:
-        typer.echo(f"Ошибка: Входной файл не найден по пути {input_excel_path}")
-        return
-    except Exception as e:
-        typer.echo(f"Ошибка чтения Excel файла: {e}")
-        return
+    with open(jsonl_file_path, 'r') as jsonl_file:
+        lines = jsonl_file.readlines()
+        total_rows = len(lines)
+        typer.echo(f"Начало обработки {total_rows} строк из файла {jsonl_file_path}...")
 
-    if text_column_name not in df.columns:
-        typer.echo(f"Ошибка: Колонка '{text_column_name}' не найдена в Excel файле.")
-        typer.echo(f"Доступные колонки: {df.columns.tolist()}")
-        return
+        for index, row in enumerate(lines):
+            row = json.loads(row)
+            original_text = str(row[text_column_name]) if pd.notna(row[text_column_name]) else ""
 
-    results = []
-    total_rows = len(df)
-    typer.echo(f"Начало обработки {total_rows} строк из файла {input_excel_path}...")
+            typer.echo(f"\nОбработка строки {index + 1}/{total_rows}...")
+            if not original_text.strip():
+                continue
 
-    for index, row in df.iterrows():
-        original_text = str(row[text_column_name]) if pd.notna(row[text_column_name]) else ""
-
-        typer.echo(f"\nОбработка строки {index + 1}/{total_rows}...")
-        if not original_text.strip():
-            continue
-
-        ollama_result = process_text_with_ollama(
-            original_text,
-            ollama_client,
-            model_name=model_name
-        )
-
-        results.append({
-            'Original_Text': original_text,
-            'Quality_Score': ollama_result['quality_score'],
-            'Processed_Text': ollama_result['processed_text'],
-            'Summary': ollama_result['summary'],
-        })
-        typer.echo(f"Строка {index + 1} обработана. Качество: {ollama_result['quality_score']:.2f}")
-
-    results_df = pd.DataFrame(results)
-    try:
-        # Создаем директорию для выходного файла, если она не существует
-        os.makedirs(os.path.dirname(output_excel_path), exist_ok=True)
-        results_df.to_excel(output_excel_path, index=False, engine='openpyxl')
-        typer.echo(f"\nОбработка завершена. Результаты сохранены в {output_excel_path}")
-    except Exception as e:
-        typer.echo(f"Ошибка записи результатов в Excel файл: {e}")
+            yield process_text_with_ollama(
+                original_text,
+                ollama_client,
+                model_name=model_name
+            )

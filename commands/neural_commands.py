@@ -1,23 +1,39 @@
 import os
-from typing import Optional, List # Убраны Dict, Any, если они не нужны для других частей
-                                # (оставлены на случай, если BASE_DIR или process_excel_file их используют неявно)
+import uuid
+from typing import Optional
 
 import typer
 from typer import Typer
 from typing_extensions import Annotated
 
-from entrypoint.config import BASE_DIR # Предполагается, что BASE_DIR может быть нужен
+from entrypoint.config import BASE_DIR
 from services.ollama_client import get_ollama_client
-# Убран импорт DialogueGeneration, DialoguePair, save_dialogue_as_json
-from services.text_generator_ollama import generate_multiple_topics
-from services.text_processor_ollama import process_excel_file # Оставлен, т.к. был импортирован
+from services.text_generator import generate_multiple_topics
+from services.text_preprocessing import process_jsonl_file
 
-
-app = Typer(help="Генератор диалогов для TTS с использованием Ollama.")
+app = Typer(help="Команды для обработки текста и генерации.")
 
 
 @app.command()
-def generate(
+def preprocess_file(
+        jsonl_file_path: Annotated[str, typer.Option(prompt=True, show_default=True)],
+        output_file_path: Annotated[str, typer.Option(prompt=True, show_default=True)] = os.path.join(BASE_DIR,"datasets",f"{uuid.uuid4().hex}.jsonl"),
+        ollama_model: Annotated[str, typer.Option(prompt=True, show_default=True)] = "qwen3:30b-a3b",
+        ollama_base_url: Annotated[str, typer.Option(prompt=True, show_default=True)] = "http://localhost:11434",
+        text_column: Annotated[str, typer.Option(prompt=True, show_default=True)] = "text",
+):
+    os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+    ollama_client = get_ollama_client(ollama_base_url, ollama_model)
+
+    with open(output_file_path, "w", encoding='utf-8') as output_file:
+        for item in process_jsonl_file(jsonl_file_path, text_column, ollama_client, ollama_model):
+            output_file.write(item.to_jsonl())
+    typer.echo(f"Запись завершена в файл {output_file_path}")
+
+
+
+@app.command()
+def generate_text(
         topic_arg: Annotated[Optional[str], typer.Option("--topic", help="Тема для генерации диалога. Используйте это или --topics-file.")] = None,
         topics_file_arg: Annotated[Optional[str], typer.Option("--topics-file", help="Файл со списком тем (по одной в строке). Используйте это или --topic.")] = None,
         samples: Annotated[int, typer.Option(prompt=True, help="Количество пар запрос-ответ для каждой темы.", show_default=True)] = 5,

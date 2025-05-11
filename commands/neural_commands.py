@@ -2,7 +2,6 @@ import json
 import os
 import uuid
 from typing import Optional
-
 import typer
 from typer import Typer
 from typing_extensions import Annotated
@@ -13,6 +12,7 @@ from models.dialogue_pair import DialoguePair
 from services.ollama_client import get_ollama_client
 from services.text_generator import generate_multiple_topics
 from services.text_preprocessing import process_jsonl_file
+from utils import get_available_gpus
 
 app = Typer(help="Команды для обработки текста и генерации.")
 
@@ -83,15 +83,16 @@ def runorm_file(
         device: Annotated[Device, typer.Option(prompt=True, show_default=True)] = Device.cuda
 ):
     from runorm import RUNorm
+    typer.echo(get_available_gpus())
     normalizer = RUNorm()
-    normalizer.load(model_size="big", device=device.value)
-
+    normalizer.load(model_size="big", device=device)
     jsonl_file_path = os.path.join(BASE_DIR, "payload_datasets", jsonl_file_name)
     dialogue_pairs = []
     with open(jsonl_file_path, "r", encoding='utf-8') as jsonl_file:
-        line = jsonl_file.readline()
-        pair = DialoguePair.model_validate(json.loads(line))
-        pair.ai_response = normalizer.norm(pair.ai_response)
-        dialogue_pairs.append(pair)
+        for line in jsonl_file:
+            pair = DialoguePair.model_validate(json.loads(line))
+            pair.ai_response = normalizer.norm(pair.ai_response)
+            dialogue_pairs.append(pair)
     with open(jsonl_file_path, "w", encoding='utf-8') as jsonl_file:
-        jsonl_file.writelines([item.to_jsonl() for item in dialogue_pairs])
+        lines = [pair.to_jsonl() for pair in dialogue_pairs]
+        jsonl_file.writelines(lines)

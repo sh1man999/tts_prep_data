@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from typing import Optional
@@ -7,6 +8,8 @@ from typer import Typer
 from typing_extensions import Annotated
 
 from entrypoint.config import BASE_DIR
+from models.device import Device
+from models.dialogue_pair import DialoguePair
 from services.ollama_client import get_ollama_client
 from services.text_generator import generate_multiple_topics
 from services.text_preprocessing import process_jsonl_file
@@ -36,7 +39,7 @@ def preprocess_file(
 def generate_text(
         topic_arg: Annotated[Optional[str], typer.Option("--topic", help="Тема для генерации диалога. Используйте это или --topics-file.")] = None,
         topics_file_arg: Annotated[Optional[str], typer.Option("--topics-file", help="Файл со списком тем (по одной в строке). Используйте это или --topic.")] = None,
-        samples: Annotated[int, typer.Option(prompt=True, help="Количество пар запрос-ответ для каждой темы.", show_default=True)] = 5,
+        samples: Annotated[int, typer.Option(prompt=True, min=1, max=30, show_default=True, help="Количество пар запрос-ответ для каждой темы.")] = 30,
         ollama_model: Annotated[str, typer.Option(prompt=True, show_default=True)] = "qwen3:30b-a3b",
         ollama_base_url: Annotated[str, typer.Option(prompt=True, show_default=True)] = "http://localhost:11434",
         temperature: Annotated[float, typer.Option(prompt=True, min=0.0, max=1.0, help="Температура генерации (0.0-1.0).", show_default=True)] = 0.7,
@@ -73,3 +76,22 @@ def generate_text(
         model_name=ollama_model,
         temperature=temperature
     )
+
+@app.command()
+def runorm_file(
+        jsonl_file_name: Annotated[str, typer.Option(prompt=True, show_default=True)] = "Здоровое_питание.jsonl",
+        device: Annotated[Device, typer.Option(prompt=True, show_default=True)] = Device.cuda
+):
+    from runorm import RUNorm
+    normalizer = RUNorm()
+    normalizer.load(model_size="big", device=device.value)
+
+    jsonl_file_path = os.path.join(BASE_DIR, "payload_datasets", jsonl_file_name)
+    dialogue_pairs = []
+    with open(jsonl_file_path, "r", encoding='utf-8') as jsonl_file:
+        line = jsonl_file.readline()
+        pair = DialoguePair.model_validate(json.loads(line))
+        pair.ai_response = normalizer.norm(pair.ai_response)
+        dialogue_pairs.append(pair)
+    with open(jsonl_file_path, "w", encoding='utf-8') as jsonl_file:
+        jsonl_file.writelines([item.to_jsonl() for item in dialogue_pairs])

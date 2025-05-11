@@ -3,6 +3,9 @@
 python run.py neural preprocess_file
 ```
 ```ssh
+python run.py neural runorm-file
+```
+```ssh
 python run.py neural generate-text --topic "Здоровое питание"
 ```
 ```ssh

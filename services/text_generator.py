@@ -3,10 +3,10 @@ import os
 from typing import List
 
 import ollama
-import pandas as pd
 import typer
 from pydantic import BaseModel, Field
 
+from models.dialogue_pair import DialoguePair
 
 SYSTEM_PROMPT = """
 Ты - эксперт по генерации реалистичных диалогов между пользователем и ИИ-ассистентом на русском языке для тренировки систем Text-to-Speech (TTS).
@@ -58,35 +58,19 @@ SYSTEM_PROMPT = """
 /no_think
 """
 
-class DialoguePair(BaseModel):
-    id: int = Field(..., description="Уникальный идентификатор пары")
-    user_query: str = Field(..., description="Запрос пользователя")
-    ai_response: str = Field(..., description="Ответ ИИ на запрос")
-
-    def to_jsonl(self):
-        return self.model_dump_json()+'\n'
-
-
-class DialogueGeneration(BaseModel):
-    topic: str = Field(..., description="Тема диалогов")
-    pairs: List[DialoguePair] = Field(..., description="Пары запрос-ответ")
-
 class TextGeneratedLLMResult(BaseModel):
     pairs: List[DialoguePair] = Field(..., description="Пары запрос-ответ")
 
 
-def generate_dialogue_with_ollama(
+def generate_dialogue(
         topic: str,
         ollama_client: ollama.Client,
         model_name: str,
         num_samples: int = 5,
         temperature: float = 0.7
-) -> DialogueGeneration:
+) -> List[DialoguePair]:
     if not topic or not topic.strip():
-        return DialogueGeneration(
-            topic="",
-            pairs=[]
-        )
+        raise ValueError("topic cannot be empty")
     user_prompt = f"Сгенерируй {num_samples} пар запрос-ответ на тему: \"{topic}\""
 
     response = ollama_client.chat(
@@ -98,23 +82,8 @@ def generate_dialogue_with_ollama(
         options={"temperature": temperature},
         format=TextGeneratedLLMResult.model_json_schema()
     )
-    content = response['message']['content']
-
-
-    typer.echo(content)
-    json_data = json.loads(content)
-    result = DialogueGeneration(
-        topic=topic,
-        pairs=[
-            DialoguePair(
-                id=pair.get("id", i + 1),
-                user_query=pair.get("user_query", ""),
-                ai_response=pair.get("ai_response", "")
-            )
-            for i, pair in enumerate(json_data.get("pairs", []))
-        ]
-    )
-    return result
+    json_content = json.loads(response['message']['content'])
+    return TextGeneratedLLMResult.model_validate(json_content).pairs
 
 
 def generate_multiple_topics(
@@ -137,7 +106,7 @@ def generate_multiple_topics(
             typer.echo("Пропуск пустой темы.")
             continue
 
-        dialogue_result = generate_dialogue_with_ollama(
+        pairs: List[DialoguePair] = generate_dialogue(
             current_topic,
             ollama_client,
             num_samples=num_samples,
@@ -148,8 +117,9 @@ def generate_multiple_topics(
 
         topic_filename = f"{current_topic.replace(' ', '_')[:30]}.jsonl"
         topic_filepath = os.path.join(output_path, topic_filename)
-        with open(topic_filepath, "w") as topic_file:
-            for pair in dialogue_result.pairs:
+        topic_filepath_mode = 'w' if os.path.exists(topic_filepath) == 0 else 'a'
+        with open(topic_filepath, topic_filepath_mode) as topic_file:
+            for pair in pairs:
                 topic_file.write(pair.to_jsonl())
 
         typer.echo(typer.style(f"Диалоги для темы '{current_topic}' сохранены в {topic_filepath}", fg=typer.colors.GREEN))

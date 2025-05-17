@@ -19,6 +19,9 @@ python run.py elevenlabs jsonl-to-audio
 ```ssh
 python run.py hf upload-folder
 ```
+```ssh
+python run.py hf calculate-dataset-duration --input-path /home/sh1man/development/python/neural/tts_prep_data/output_elevenlabs/den4ikai/audio
+```
 
 Требования к аудио на выходе
 ElevenLabs default voices: https://elevenlabs.io/docs/product/voices/default-voices

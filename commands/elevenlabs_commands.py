@@ -25,7 +25,7 @@ def jsonl_to_audio(
             str, typer.Option(prompt=True, show_default=True)] = os.path.join(
             BASE_DIR, "output_elevenlabs"),
         voice_name: Annotated[ElevenlabsVoice, typer.Option(prompt=True, show_default=True,
-                                                            case_sensitive=False)] = ElevenlabsVoice.vlasov,
+                                                            case_sensitive=False)] = ElevenlabsVoice.nuri,
         limit: Annotated[int, typer.Option(prompt=True, show_default=True)] = 5,
         audio_format: Annotated[str, typer.Option(prompt=True, show_default=True)] = ".wav",  # .wav .mp3
 ):

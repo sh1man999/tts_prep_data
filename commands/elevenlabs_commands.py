@@ -25,7 +25,7 @@ def jsonl_to_audio(
             str, typer.Option(prompt=True, show_default=True)] = os.path.join(
             BASE_DIR, "output_elevenlabs"),
         voice_name: Annotated[ElevenlabsVoice, typer.Option(prompt=True, show_default=True,
-                                                            case_sensitive=False)] = ElevenlabsVoice.nuri,
+                                                            case_sensitive=False)] = ElevenlabsVoice.saira,
         limit: Annotated[int, typer.Option(prompt=True, show_default=True)] = 5,
         audio_format: Annotated[str, typer.Option(prompt=True, show_default=True)] = ".wav",  # .wav .mp3
 ):
@@ -72,7 +72,7 @@ def jsonl_to_audio(
                             # Определяет, насколько стабилен голос и насколько случайным является каждое его поколение. Более низкие значения расширяют эмоциональный диапазон голоса. Более высокие значения могут привести к монотонному голосу с ограниченными эмоциями.
                             stability=0.8,
                             # Определяет, насколько точно ИИ должен придерживаться оригинального голоса при попытке его воспроизведения.
-                            similarity_boost=1.0,
+                            similarity_boost=0.8,
                             speed=1,
                             use_speaker_boost=True,
                             # Определяет преувеличение стиля голоса. Эта настройка пытается усилить стиль оригинального диктора. Она потребляет дополнительные вычислительные ресурсы и может увеличить задержку, если установить значение, отличное от 0.

@@ -13,6 +13,8 @@ dependencies = [
     "torch==2.5.1+cu124",
     "runorm>=1.1",
     "typer>=0.15.3",
+    "openai>=1.88.0",
+    "google-generativeai>=0.8.5",
 ]
 
 [tool.uv.sources]

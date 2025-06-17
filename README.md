@@ -1,6 +1,6 @@
 ## Neural commands
 ```ssh
-python run.py neural preprocess_file
+python run.py neural preprocess-file
 ```
 ```ssh
 python run.py neural runorm-file
@@ -29,3 +29,7 @@ ElevenLabs default voices: https://elevenlabs.io/docs/product/voices/default-voi
 2. Минимальная длина звука составляет 0,8 секунды
 3. Максимальная длина текста(фонем) составляет <= 510 токенов `Assert Len (Phonemes) <= 510`
 4. аудио не более 45 секунд 
+
+# Описания
+
+payload_datasets - туда перекладываем файл для генерации аудио

@@ -1,13 +1,16 @@
 import json
+import os
+from typing import Generator
 
 import ollama
 import pandas as pd
 import typer
 from pydantic import BaseModel
 
+from models.base_llm_client import BaseLLMClient
 from models.preprocessed_text import NeuralProcessedText
 
-# Системный промпт для Ollama
+# Системный промпт
 SYSTEM_PROMPT = """
 You are an expert linguistic assistant specializing in preparing **Russian text** for Text-to-Speech (TTS) synthesis. Your task is to analyze input Russian text, assess its quality, process it for optimal TTS output, and provide an explanation for your quality assessment including any issues found in the original text.
 
@@ -74,61 +77,139 @@ class TextProcessedLLMResult(BaseModel):
     summary: str
 
 
-def process_text_with_ollama(
-        text_to_process: str,
-        ollama_client: ollama.Client,
-        model_name,
-        temperature: float = 0.3
+class NeuralProcessedText(BaseModel):
+    quality_score: float
+    processed_text: str
+    summary: str
+    original_text: str
+
+    def to_jsonl(self) -> str:
+        """Конвертирует объект в JSONL строку"""
+        return json.dumps(self.dict(), ensure_ascii=False) + "\n"
+
+
+def process_text_with_llm(
+    text_to_process: str, llm_client: BaseLLMClient, temperature: float = 0.3
 ) -> NeuralProcessedText:
+    """
+    Обрабатывает текст с помощью LLM
+
+    Args:
+        text_to_process: Текст для обработки
+        llm_client: Клиент LLM для обработки
+        temperature: Температура генерации
+
+    Returns:
+        NeuralProcessedText с результатами обработки
+    """
     text_to_process = text_to_process.strip()
     if not text_to_process:
-        raise ValueError('No text provided.')
+        raise ValueError("No text provided.")
 
-    response = ollama_client.chat(
-        model=model_name,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text_to_process},
-        ],
-        options={"temperature": temperature},
-        format=TextProcessedLLMResult.model_json_schema()
-    )
-    content = response['message']['content']
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": text_to_process},
+    ]
 
-    result = json.loads(content)
-    typer.echo(result)
-    quality_score = float(result.get("quality_score", 0.0))
-    summary = result.get("summary", "")
-    processed_text = result.get("processed_text", text_to_process)  # Возвращаем исходный текст при ошибке ключа
-    return NeuralProcessedText(
-        quality_score=quality_score,
-        processed_text=processed_text,
-        summary=summary,
-        original_text=text_to_process,
-    )
+    try:
+        response = llm_client.chat(
+            messages=messages,
+            temperature=temperature,
+            response_format=TextProcessedLLMResult.model_json_schema(),
+        )
+
+        result = json.loads(response)
+        typer.echo(f"Оценка качества: {result.get('quality_score', 0.0)}")
+
+        quality_score = float(result.get("quality_score", 0.0))
+        summary = result.get("summary", "")
+        processed_text = result.get("processed_text", text_to_process)
+
+        return NeuralProcessedText(
+            quality_score=quality_score,
+            processed_text=processed_text,
+            summary=summary,
+            original_text=text_to_process,
+        )
+    except Exception as e:
+        typer.echo(f"Ошибка обработки: {str(e)}", err=True)
+        # В случае ошибки возвращаем исходный текст
+        return NeuralProcessedText(
+            quality_score=0.0,
+            processed_text=text_to_process,
+            summary="Ошибка обработки",
+            original_text=text_to_process,
+        )
 
 
 def process_jsonl_file(
-        jsonl_file_path: str,
-        text_column_name: str,
-        ollama_client: ollama.Client,
-        model_name: str
-):
-    with open(jsonl_file_path, 'r') as jsonl_file:
+    jsonl_file_path: str,
+    text_column_name: str,
+    llm_client: BaseLLMClient,
+) -> Generator[NeuralProcessedText, None, None]:
+    """
+    Обрабатывает JSONL файл построчно
+
+    Args:
+        jsonl_file_path: Путь к JSONL файлу
+        text_column_name: Название колонки с текстом
+        llm_client: Клиент LLM для обработки
+
+    Yields:
+        NeuralProcessedText для каждой обработанной строки
+    """
+    if not os.path.exists(jsonl_file_path):
+        raise FileNotFoundError(f"Файл не найден: {jsonl_file_path}")
+
+    with open(jsonl_file_path, "r", encoding="utf-8") as jsonl_file:
         lines = jsonl_file.readlines()
         total_rows = len(lines)
         typer.echo(f"Начало обработки {total_rows} строк из файла {jsonl_file_path}...")
 
-        for index, row in enumerate(lines):
-            row = json.loads(row)
-            original_text = str(row[text_column_name]) if pd.notna(row[text_column_name]) else ""
+        processed_count = 0
+        skipped_count = 0
 
-            typer.echo(f"\nОбработка строки {index + 1}/{total_rows}...")
-            if not original_text.strip():
+        for index, row in enumerate(lines):
+            try:
+                row_data = json.loads(row)
+
+                # Проверяем наличие нужной колонки
+                if text_column_name not in row_data:
+                    typer.echo(
+                        f"Предупреждение: колонка '{text_column_name}' не найдена в строке {index + 1}",
+                        err=True,
+                    )
+                    skipped_count += 1
+                    continue
+
+                original_text = (
+                    str(row_data[text_column_name])
+                    if row_data[text_column_name]
+                    else ""
+                )
+
+                typer.echo(f"\nОбработка строки {index + 1}/{total_rows}...")
+
+                if not original_text.strip():
+                    typer.echo("Пропуск пустой строки")
+                    skipped_count += 1
+                    continue
+
+                result = process_text_with_llm(original_text, llm_client)
+
+                processed_count += 1
+                yield result
+
+            except json.JSONDecodeError as e:
+                typer.echo(
+                    f"Ошибка парсинга JSON в строке {index + 1}: {str(e)}", err=True
+                )
+                skipped_count += 1
+                continue
+            except Exception as e:
+                typer.echo(f"Ошибка обработки строки {index + 1}: {str(e)}", err=True)
+                skipped_count += 1
                 continue
 
-            yield process_text_with_ollama(
-                original_text,
-                ollama_client,
-                model_name=model_name
-            )
+        typer.echo(f"\nОбработка завершена. Обработано: {processed_count}, пропущено: {skipped_count}")
+

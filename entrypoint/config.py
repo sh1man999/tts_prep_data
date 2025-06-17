@@ -9,3 +9,4 @@ load_dotenv()
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 ELEVENLABS_TOKEN = os.getenv("ELEVENLABS_TOKEN")
+LLM_TOKEN = os.getenv("LLM_TOKEN")

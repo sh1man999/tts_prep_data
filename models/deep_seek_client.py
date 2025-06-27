@@ -22,7 +22,7 @@ class DeepSeekClient(BaseLLMClient):
             model=self.model_name,
             messages=messages,
             temperature=temperature,
-            response_format={"type": "json_object"},
+            response_format=response_format,
             stream=False
         )
         return response.choices[0].message.content

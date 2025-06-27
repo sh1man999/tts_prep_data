@@ -1,5 +1,6 @@
 import json
 import os
+import traceback
 import uuid
 from typing import Optional
 import typer
@@ -8,11 +9,11 @@ from typing_extensions import Annotated
 
 from entrypoint.config import BASE_DIR
 from models.device import Device
-from models.dialogue_pair import DialoguePair
+from models.dialogue_pair import DialoguePair, DialogueResult
 from models.llm_provider import LLMProvider
 from services.llm_client import create_llm_client
 from services.text_generator import generate_multiple_topics
-from services.text_preprocessing import process_jsonl_file
+from services.text_preprocessing import process_jsonl_file, generate_text_hash
 from utils import get_available_gpus
 
 app = Typer(help="Команды для обработки текста и генерации.")
@@ -33,18 +34,6 @@ def preprocess_file(
         LLMProvider, typer.Option(help="LLM провайдер")
     ] = LLMProvider.OLLAMA,
     model_name: Annotated[str, typer.Option(help="Название модели")] = "qwen3:30b-a3b",
-    api_key: Annotated[
-        Optional[str], typer.Option(help="API ключ (для DeepSeek, Gemini, OpenAI)")
-    ] = None,
-    base_url: Annotated[
-        str, typer.Option(help="Base URL (для Ollama)")
-    ] = "http://localhost:11434",
-    text_column: Annotated[
-        str, typer.Option(help="Название колонки с текстом в JSONL")
-    ] = "text",
-    temperature: Annotated[
-        float, typer.Option(min=0.0, max=1.0, help="Температура генерации")
-    ] = 0.3,
     input_dir: Annotated[
         str, typer.Option(help="Директория с входными файлами")
     ] = "./datasets",
@@ -55,13 +44,6 @@ def preprocess_file(
     """
     Обрабатывает JSONL файл с помощью выбранного LLM провайдера
     """
-    typer.echo(typer.style("Параметры обработки:", bold=True))
-    typer.echo(f"  Входной файл: {jsonl_file_name}")
-    typer.echo(f"  Провайдер: {provider.value}")
-    typer.echo(f"  Модель: {model_name}")
-    typer.echo(f"  Температура: {temperature}")
-    typer.echo(f"  Колонка с текстом: {text_column}")
-
     # Формируем пути
     jsonl_file_path = os.path.join(input_dir, jsonl_file_name)
 
@@ -82,26 +64,8 @@ def preprocess_file(
     # Создаем директорию для выходного файла
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
 
-    # Проверяем API ключ для провайдеров, которые его требуют
-    if (
-        provider in [LLMProvider.DEEPSEEK, LLMProvider.GEMINI]
-        and not api_key
-    ):
-        typer.echo(
-            typer.style(
-                f"API ключ обязателен для провайдера {provider.value}",
-                fg=typer.colors.RED,
-            )
-        )
-        raise typer.Exit(code=1)
-
     # Создаем LLM клиент
     client_kwargs = {"model_name": model_name}
-
-    if provider == LLMProvider.OLLAMA:
-        client_kwargs["base_url"] = base_url
-    else:
-        client_kwargs["api_key"] = api_key
 
     try:
         llm_client = create_llm_client(provider, **client_kwargs)
@@ -115,15 +79,19 @@ def preprocess_file(
 
     # Обрабатываем файл
     try:
-        processed_items = 0
         with open(output_file_path, "w", encoding="utf-8") as output_file:
-            for item in process_jsonl_file(jsonl_file_path, text_column, llm_client):
-                output_file.write(item.to_jsonl())
-                processed_items += 1
+            for batch in process_jsonl_file(jsonl_file_path, llm_client):
+                for item in batch:
+                    id1 = generate_text_hash(item.user_query)
+                    text1 = item.user_query
+                    id2 = generate_text_hash(item.ai_response)
+                    text2 = item.ai_response
+                    output_file.write(DialogueResult(id=id1, text=text1).to_jsonl())
+                    output_file.write(DialogueResult(id=id2, text=text2).to_jsonl())
 
         typer.echo(
             typer.style(
-                f"\n✅ Обработка завершена! Обработано элементов: {processed_items}",
+                f"\n✅ Обработка завершена!",
                 fg=typer.colors.GREEN,
                 bold=True,
             )
@@ -134,33 +102,28 @@ def preprocess_file(
         typer.echo(
             typer.style(f"\n❌ Ошибка при обработке: {str(e)}", fg=typer.colors.RED)
         )
-        # Удаляем частично созданный файл
-        if os.path.exists(output_file_path):
-            os.remove(output_file_path)
         raise typer.Exit(code=1)
 
 
 @app.command()
 def generate_text(
-    topic_arg: Annotated[
+    topic: Annotated[
         Optional[str],
         typer.Option(
-            "--topic",
             help="Тема для генерации диалога. Используйте это или --topics-file.",
         ),
     ] = None,
-    topics_file_arg: Annotated[
+    topics_file: Annotated[
         Optional[str],
         typer.Option(
-            "--topics-file",
             help="Файл со списком тем (по одной в строке). Используйте это или --topic.",
         ),
     ] = None,
-    samples: Annotated[int, typer.Option(prompt=True, min=1, max=30, show_default=True, help="Количество пар запрос-ответ для каждой темы.")] = 100,
+    samples: Annotated[int, typer.Option(prompt=True, min=1, max=1000, show_default=True, help="Количество пар запрос-ответ для каждой темы.")] = 100,
     provider: Annotated[
-        LLMProvider, typer.Option(prompt=True, show_default=True, help="LLM провайдер")
+        LLMProvider, typer.Option(show_default=True, help="LLM провайдер")
     ] = LLMProvider.OLLAMA,
-    model_name: Annotated[Optional[str], typer.Option(prompt=True, help="Название модели")] = None,
+    model_name: Annotated[Optional[str], typer.Option(help="Название модели")] = None,
     base_url: Annotated[
         str, typer.Option(help="Base URL (для Ollama)")
     ] = "http://localhost:11434",
@@ -195,27 +158,27 @@ def generate_text(
 
     # Определяем темы для обработки
     topics_to_process = []
-    if topic_arg:
-        topics_to_process = [topic_arg]
-        typer.echo(f"  Используется одна тема из аргумента: '{topic_arg}'")
-    elif topics_file_arg:
-        if os.path.exists(topics_file_arg):
-            with open(topics_file_arg, "r", encoding="utf-8") as f:
+    if topic:
+        topics_to_process = [topic]
+        typer.echo(f"  Используется одна тема из аргумента: '{topic}'")
+    elif topics_file:
+        if os.path.exists(topics_file):
+            with open(topics_file, "r", encoding="utf-8") as f:
                 topics_to_process = [line.strip() for line in f if line.strip()]
             if topics_to_process:
                 typer.echo(
-                    f"  Используются темы из файла: '{topics_file_arg}' ({len(topics_to_process)} тем)"
+                    f"  Используются темы из файла: '{topics_file}' ({len(topics_to_process)} тем)"
                 )
             else:
                 typer.echo(
                     typer.style(
-                        f"Файл тем '{topics_file_arg}' пуст.", fg=typer.colors.YELLOW
+                        f"Файл тем '{topics_file}' пуст.", fg=typer.colors.YELLOW
                     )
                 )
         else:
             typer.echo(
                 typer.style(
-                    f"Файл тем '{topics_file_arg}' не найден.", fg=typer.colors.RED
+                    f"Файл тем '{topics_file}' не найден.", fg=typer.colors.RED
                 )
             )
 
@@ -243,6 +206,7 @@ def generate_text(
             )
         )
     except Exception as e:
+        traceback.print_exc()
         typer.echo(
             typer.style(f"\n❌ Ошибка при генерации: {str(e)}", fg=typer.colors.RED)
         )

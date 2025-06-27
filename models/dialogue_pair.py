@@ -8,3 +8,10 @@ class DialoguePair(BaseModel):
 
     def to_jsonl(self):
         return self.model_dump_json()+'\n'
+
+class DialogueResult(BaseModel):
+    id: str
+    text: str
+
+    def to_jsonl(self):
+        return self.model_dump_json()+'\n'

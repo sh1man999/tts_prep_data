@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Any
 
 
 class BaseLLMClient(ABC):
@@ -9,7 +9,7 @@ class BaseLLMClient(ABC):
     def chat(self,
              messages: list[dict[str, str]],
              temperature: float = 0.7,
-             response_format: Optional[dict[str, Any]] = None) -> str:
+             response_format: Any = None) -> str:
         """
         Отправляет сообщения в LLM и возвращает ответ
 

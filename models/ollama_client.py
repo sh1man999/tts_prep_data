@@ -4,10 +4,10 @@ from models.base_llm_client import BaseLLMClient
 
 
 class OllamaClient(BaseLLMClient):
-    def __init__(self, base_url: str, model_name: str):
+    def __init__(self, model_name: str):
         import ollama
 
-        self.client = ollama.Client(host=base_url)
+        self.client = ollama.Client(host="http://localhost:11434")
         self.model_name = model_name
 
     def chat(

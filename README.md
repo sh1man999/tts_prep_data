@@ -1,12 +1,12 @@
 ## Neural commands
 ```ssh
-python run.py neural preprocess-file
+python run.py neural generate-text --topic "Колл-центр" --provider "gemini" --model-name "gemini-2.5-flash"
+```
+```ssh
+python run.py neural preprocess-file --jsonl-file-name "Колл-центр.jsonl" --provider "gemini" --model-name "gemini-2.5-flash"
 ```
 ```ssh
 python run.py neural runorm-file
-```
-```ssh
-python run.py neural generate-text --topic "Здоровое питание"
 ```
 ```ssh
 python run.py neural generate-text --topics-file themes.txt

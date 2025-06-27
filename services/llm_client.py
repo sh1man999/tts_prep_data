@@ -17,7 +17,6 @@ def create_llm_client(provider: LLMProvider, **kwargs) -> BaseLLMClient:
     """
     if provider == LLMProvider.OLLAMA:
         return OllamaClient(
-            base_url=kwargs.get("base_url", "http://localhost:11434"),
             model_name=kwargs.get("model_name", "qwen3:30b-a3b")
         )
     elif provider == LLMProvider.DEEPSEEK:

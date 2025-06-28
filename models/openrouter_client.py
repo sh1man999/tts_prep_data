@@ -1,5 +1,4 @@
 from typing import Any
-from google import genai
 import outlines
 from openai import OpenAI
 

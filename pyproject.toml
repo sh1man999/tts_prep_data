@@ -13,8 +13,7 @@ dependencies = [
     "torch==2.5.1+cu124",
     "runorm>=1.1",
     "typer>=0.15.3",
-    "openai>=1.88.0",
-    "outlines[gemini]>=1.0.2",
+    "outlines[gemini, openai]>=1.0.2",
     "tqdm>=4.67.1",
 ]
 

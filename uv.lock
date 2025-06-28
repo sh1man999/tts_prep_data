@@ -983,6 +983,9 @@ wheels = [
 gemini = [
     { name = "google-genai" },
 ]
+openai = [
+    { name = "openai" },
+]
 
 [[package]]
 name = "outlines-core"
@@ -1690,9 +1693,8 @@ dependencies = [
     { name = "datasets" },
     { name = "elevenlabs" },
     { name = "ollama" },
-    { name = "openai" },
     { name = "openpyxl" },
-    { name = "outlines", extra = ["gemini"] },
+    { name = "outlines", extra = ["gemini", "openai"] },
     { name = "pandas" },
     { name = "python-dotenv" },
     { name = "runorm" },
@@ -1706,9 +1708,8 @@ requires-dist = [
     { name = "datasets", specifier = ">=3.6.0" },
     { name = "elevenlabs", specifier = ">=1.58.1" },
     { name = "ollama", specifier = ">=0.4.8" },
-    { name = "openai", specifier = ">=1.88.0" },
     { name = "openpyxl", specifier = ">=3.1.5" },
-    { name = "outlines", extras = ["gemini"], specifier = ">=1.0.2" },
+    { name = "outlines", extras = ["gemini", "openai"], specifier = ">=1.0.2" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "runorm", specifier = ">=1.1" },

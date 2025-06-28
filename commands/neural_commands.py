@@ -30,6 +30,7 @@ def preprocess_file(
             help="Имя выходного файла (если не указано, генерируется автоматически)"
         ),
     ] = None,
+    batch_size: Annotated[int, typer.Option(prompt=True, show_default=True, help="Кол-во примеров в одном запросе")] = 50,
     provider: Annotated[
         LLMProvider, typer.Option(help="LLM провайдер")
     ] = LLMProvider.OLLAMA,
@@ -80,7 +81,7 @@ def preprocess_file(
     # Обрабатываем файл
     try:
         with open(output_file_path, "w", encoding="utf-8") as output_file:
-            for batch in process_jsonl_file(jsonl_file_path, llm_client):
+            for batch in process_jsonl_file(jsonl_file_path, llm_client, batch_size):
                 for item in batch:
                     id1 = generate_text_hash(item.user_query)
                     text1 = item.user_query
@@ -120,6 +121,7 @@ def generate_text(
         ),
     ] = None,
     samples: Annotated[int, typer.Option(prompt=True, min=1, max=1000, show_default=True, help="Количество пар запрос-ответ для каждой темы.")] = 100,
+    batch_size: Annotated[int, typer.Option(prompt=True, show_default=True, help="Кол-во примеров в одном запросе")] = 200,
     provider: Annotated[
         LLMProvider, typer.Option(show_default=True, help="LLM провайдер")
     ] = LLMProvider.OLLAMA,
@@ -197,6 +199,7 @@ def generate_text(
             topics_to_process,
             output_dir,
             llm_client,
+            batch_size,
             num_samples=samples,
             temperature=temperature,
         )

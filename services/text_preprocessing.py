@@ -161,7 +161,7 @@ def generate_text_hash(text: str) -> str:
 def process_jsonl_file(
     jsonl_file_path: str,
     llm_client: BaseLLMClient,
-    batch_size: int = 100,
+    batch_size: int,
 ) -> Generator[List[DialoguePair], None, None]:
     with open(jsonl_file_path, "r", encoding="utf-8") as jsonl_file:
         lines = jsonl_file.readlines()

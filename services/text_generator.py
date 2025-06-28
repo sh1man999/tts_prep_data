@@ -1,8 +1,9 @@
 # text_generator.py
 import os
-from typing import List
+from typing import List, Generator
 import typer
 from pydantic import BaseModel, Field
+from tqdm import tqdm
 
 from models.base_llm_client import BaseLLMClient
 from models.dialogue_pair import DialoguePair
@@ -81,62 +82,132 @@ class TextGeneratedLLMResult(BaseModel):
     pairs: List[DialoguePair] = Field(..., description="Пары запрос-ответ")
 
 
-
 def generate_dialogue(
     topic: str,
     llm_client: BaseLLMClient,
+    batch_size: int,
     num_samples: int = 5,
     temperature: float = 0.7,
-) -> List[DialoguePair]:
+) -> Generator[List[DialoguePair], None, None]:
+    """
+    Генератор диалогов батчами с использованием контекста предыдущих пар.
+    Yield'ит батчи по мере генерации.
+    """
     if not topic or not topic.strip():
         raise ValueError("topic cannot be empty")
 
-    user_prompt = f'Сгенерируй {num_samples} пар запрос-ответ на тему: "{topic}"'
+    last_pair = None
+    generated_count = 0
 
-    messages = [
-        {"role": "system", "content": GENERATION_PROMPT},
-        {"role": "user", "content": user_prompt},
-    ]
+    # Прогресс бар для батчей
+    with tqdm(
+        total=num_samples, desc=f"Генерация для '{topic[:30]}'", unit="пар"
+    ) as pbar:
+        while generated_count < num_samples:
+            # Вычисляем размер текущего батча
+            current_batch_size = min(batch_size, num_samples - generated_count)
 
-    response = llm_client.chat(
-        messages=messages,
-        temperature=temperature,
-        response_format=TextGeneratedLLMResult,
-    )
-    return TextGeneratedLLMResult.model_validate_json(response).pairs
+            # Формируем промпт с учетом последней пары
+            if last_pair:
+                user_prompt = (
+                    f'Сгенерируй {current_batch_size} пар запрос-ответ на тему: "{topic}"\n\n'
+                    f"Последняя сгенерированная пара:\n"
+                    f"{last_pair.to_jsonl()}\n"
+                    f"Продолжай в том же стиле, но создавай новые уникальные пары."
+                )
+            else:
+                user_prompt = f'Сгенерируй {current_batch_size} пар запрос-ответ на тему: "{topic}"'
 
+            messages = [
+                {"role": "system", "content": GENERATION_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            # Генерируем батч
+            response = llm_client.chat(
+                messages=messages,
+                temperature=temperature,
+                response_format=TextGeneratedLLMResult,
+            )
+
+            batch_pairs = TextGeneratedLLMResult.model_validate_json(response).pairs
+
+            # Сохраняем последнюю пару для следующего батча
+            if batch_pairs:
+                last_pair = batch_pairs[-1]
+                generated_count += len(batch_pairs)
+
+                # Обновляем прогресс
+                pbar.update(len(batch_pairs))
+
+                # Yield'им батч для немедленной обработки
+                yield batch_pairs
 
 def generate_multiple_topics(
     topics_list: List[str],
     output_path: str,
     llm_client: BaseLLMClient,
+    batch_size: int,
     num_samples: int = 5,
     temperature: float = 0.7,
 ):
     """
-    Генерирует диалоги для нескольких тем и сохраняет результаты в jsonl файл.
+    Генерирует диалоги для нескольких тем и сохраняет результаты в jsonl файлы.
     """
     total_topics_count = len(topics_list)
     typer.echo(f"Начало генерации диалогов для {total_topics_count} тем...")
 
-    for index, current_topic in enumerate(topics_list):
+    # Основной прогресс бар для тем
+    for index, current_topic in enumerate(
+        tqdm(topics_list, desc="Обработка тем", unit="тема")
+    ):
         typer.echo(
-            f"\nОбработка темы {index + 1}/{total_topics_count}: '{current_topic}'..."
+            f"\n\nОбработка темы {index + 1}/{total_topics_count}: '{current_topic}'..."
         )
+
         if not current_topic.strip():
             typer.echo("Пропуск пустой темы.")
             continue
 
-        pairs: List[DialoguePair] = generate_dialogue(
-            current_topic, llm_client, num_samples=num_samples, temperature=temperature
-        )
-
+        # Создаем имя файла для темы
         topic_filename = f"{current_topic.replace(' ', '_')[:30]}.jsonl"
         topic_filepath = os.path.join(output_path, topic_filename)
         topic_filepath_mode = "w" if not os.path.exists(topic_filepath) else "a"
 
-        with open(topic_filepath, topic_filepath_mode) as topic_file:
-            for pair in pairs:
-                topic_file.write(pair.to_jsonl())
+        # Генерируем и сохраняем диалоги батчами
+        try:
+            pairs_count = 0
+            with open(topic_filepath, topic_filepath_mode) as topic_file:
+                for batch_pairs in generate_dialogue(
+                    topic=current_topic,
+                    llm_client=llm_client,
+                    batch_size=batch_size,
+                    num_samples=num_samples,
+                    temperature=temperature,
+                ):
+                    # Записываем каждую пару из батча
+                    for pair in batch_pairs:
+                        topic_file.write(pair.to_jsonl())
+                        pairs_count += 1
 
-        typer.echo(typer.style(f"Диалоги для темы '{current_topic}' сохранены в {topic_filepath}", fg=typer.colors.GREEN))
+                    # Принудительная запись в файл после каждого батча
+                    topic_file.flush()
+
+            typer.echo(
+                typer.style(
+                    f"✓ Диалоги для темы '{current_topic}' сохранены в {topic_filepath} "
+                    f"({pairs_count} пар)",
+                    fg=typer.colors.GREEN,
+                )
+            )
+
+        except Exception as e:
+            typer.echo(
+                typer.style(
+                    f"✗ Ошибка при обработке темы '{current_topic}': {str(e)}",
+                    fg=typer.colors.RED,
+                )
+            )
+            continue
+
+    typer.echo(typer.style("\n✓ Генерация завершена!", fg=typer.colors.GREEN, bold=True))

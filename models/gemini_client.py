@@ -1,4 +1,6 @@
 from typing import Optional, Any
+
+import typer
 from google import genai
 import outlines
 
@@ -25,5 +27,5 @@ class GeminiClient(BaseLLMClient):
                 prompt += f"Инструкции: {msg['content']}\n\n"
             else:
                 prompt += f"{msg['content']}\n\n"
-        result = self.model(prompt, response_format, max_output_tokens=32000)
+        result = self.model(prompt, response_format, max_output_tokens=65000)
         return result

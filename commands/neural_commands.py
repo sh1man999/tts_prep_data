@@ -13,14 +13,14 @@ from models.dialogue_pair import DialoguePair, DialogueResult
 from models.llm_provider import LLMProvider
 from services.llm_client import create_llm_client
 from services.text_generator import generate_multiple_topics
-from services.text_preprocessing import process_jsonl_file, generate_text_hash
+from services.text_postprocessing import process_jsonl_file, generate_text_hash
 from utils import get_available_gpus
 
 app = Typer(help="Команды для обработки текста и генерации.")
 
 
 @app.command()
-def preprocess_file(
+def postprocess_file(
     jsonl_file_name: Annotated[
         str, typer.Option(help="Имя JSONL файла для обработки")
     ] = "Здоровое_питание.jsonl",

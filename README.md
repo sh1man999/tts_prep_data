@@ -3,7 +3,8 @@
 python run.py neural generate-text --topic "Колл-центр" --provider "gemini" --model-name "gemini-2.5-flash"
 ```
 ```ssh
-python run.py neural preprocess-file --jsonl-file-name "Колл-центр.jsonl" --provider "gemini" --model-name "gemini-2.5-flash"
+python run.py neural postprocess-file --jsonl-file-name "Колл-центр.jsonl" --provider "gemini" --model-name "gemini-2.5-flash"
+python run.py neural postprocess-file --jsonl-file-name "Колл-центр.jsonl" --provider "openrouter" --model-name "openai/gpt-4.1"
 ```
 ```ssh
 python run.py neural runorm-file

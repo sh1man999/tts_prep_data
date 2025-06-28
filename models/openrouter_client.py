@@ -1,15 +1,16 @@
 from typing import Any
 from google import genai
 import outlines
+from openai import OpenAI
 
 from models.base_llm_client import BaseLLMClient
 
 
 
-class GeminiClient(BaseLLMClient):
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
-        client = genai.Client(api_key=api_key)
-        self.model = outlines.from_gemini(
+class OpenRouterClient(BaseLLMClient):
+    def __init__(self, api_key: str, model_name: str = "openai/gpt-4.1"):
+        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+        self.model = outlines.from_openai(
             client,
             model_name
         )
@@ -25,5 +26,5 @@ class GeminiClient(BaseLLMClient):
                 prompt += f"Инструкции: {msg['content']}\n\n"
             else:
                 prompt += f"{msg['content']}\n\n"
-        result = self.model(prompt, response_format, max_output_tokens=65000)
+        result = self.model(prompt, response_format, max_tokens=32000)
         return result

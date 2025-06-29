@@ -90,9 +90,9 @@ def postprocess_file(
                     if any(char.isdigit() for char in item.ai_response):
                         continue
                     id1 = generate_text_hash(item.user_query)
-                    text1 = item.user_query
+                    text1 = item.user_query.strip()
                     id2 = generate_text_hash(item.ai_response)
-                    text2 = item.ai_response
+                    text2 = item.ai_response.strip()
                     # Записываем только уникальные тексты
                     if id1 not in seen_hashes:
                         seen_hashes.add(id1)
@@ -132,7 +132,7 @@ def generate_text(
             help="Файл со списком тем (по одной в строке). Используйте это или --topic.",
         ),
     ] = None,
-    samples: Annotated[int, typer.Option(prompt=True, min=1, max=1000, show_default=True, help="Количество пар запрос-ответ для каждой темы.")] = 100,
+    samples: Annotated[int, typer.Option(prompt=True, min=1, max=10000, show_default=True, help="Количество пар запрос-ответ для каждой темы.")] = 80,
     batch_size: Annotated[int, typer.Option(prompt=True, show_default=True, help="Кол-во примеров в одном запросе")] = 200,
     provider: Annotated[
         LLMProvider, typer.Option(show_default=True, help="LLM провайдер")

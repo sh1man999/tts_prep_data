@@ -20,14 +20,14 @@ app = Typer(help="Команды для обработки текста.")
 
 @app.command()
 def jsonl_to_audio(
-        input_file_name: Annotated[str, typer.Option(prompt=True, show_default=True)] = "den4ikai.jsonl",
+        input_file_name: Annotated[str, typer.Option(show_default=True)] = "den4ikai.jsonl",
         output_path: Annotated[
-            str, typer.Option(prompt=True, show_default=True)] = os.path.join(
+            str, typer.Option(show_default=True)] = os.path.join(
             BASE_DIR, "output_elevenlabs"),
         voice_name: Annotated[ElevenlabsVoice, typer.Option(prompt=True, show_default=True,
-                                                            case_sensitive=False)] = ElevenlabsVoice.saira,
+                                                            case_sensitive=False)] = ElevenlabsVoice.sfrv,
         limit: Annotated[int, typer.Option(prompt=True, show_default=True)] = 5,
-        audio_format: Annotated[str, typer.Option(prompt=True, show_default=True)] = ".wav",  # .wav .mp3
+        audio_format: Annotated[str, typer.Option(show_default=True)] = ".wav",  # .wav .mp3
 ):
     input_file_path = os.path.join(BASE_DIR, "payload_datasets", input_file_name)
     source = input_file_name.replace(".jsonl", "")

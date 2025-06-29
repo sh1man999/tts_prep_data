@@ -1,9 +1,9 @@
 ## Neural commands
 ```ssh
-python run.py neural generate-text --topic "Колл-центр" --provider "gemini" --model-name "gemini-2.5-flash"
+python run.py neural generate-text --topic "Сказки для детей" --provider "gemini" --model-name "gemini-2.5-flash"
 ```
 ```ssh
-python run.py neural postprocess-file --jsonl-file-name "Колл-центр.jsonl" --provider "gemini" --model-name "gemini-2.5-flash"
+python run.py neural postprocess-file --jsonl-file-name "Сказки_для_детей.jsonl" --provider "gemini" --model-name "gemini-2.5-flash"
 python run.py neural postprocess-file --jsonl-file-name "Колл-центр.jsonl" --provider "openrouter" --model-name "openai/gpt-4.1"
 ```
 ```ssh
@@ -14,7 +14,7 @@ python run.py neural generate-text --topics-file themes.txt
 ```
 ## Elevenlabs commands
 ```ssh
-python run.py elevenlabs jsonl-to-audio
+python run.py elevenlabs jsonl-to-audio --input-file-name fairy_tales_children.jsonl
 ```
 ## HuggingFace commands
 ```ssh

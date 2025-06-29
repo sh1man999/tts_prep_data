@@ -80,15 +80,27 @@ def postprocess_file(
 
     # Обрабатываем файл
     try:
+        seen_hashes = set()
         with open(output_file_path, "w", encoding="utf-8") as output_file:
             for batch in process_jsonl_file(jsonl_file_path, llm_client, batch_size):
                 for item in batch:
+                    # Пропускаем, если в тексте есть цифры
+                    if any(char.isdigit() for char in item.user_query):
+                        continue
+                    if any(char.isdigit() for char in item.ai_response):
+                        continue
                     id1 = generate_text_hash(item.user_query)
                     text1 = item.user_query
                     id2 = generate_text_hash(item.ai_response)
                     text2 = item.ai_response
-                    output_file.write(DialogueResult(id=id1, text=text1).to_jsonl())
-                    output_file.write(DialogueResult(id=id2, text=text2).to_jsonl())
+                    # Записываем только уникальные тексты
+                    if id1 not in seen_hashes:
+                        seen_hashes.add(id1)
+                        output_file.write(DialogueResult(id=id1, text=text1).to_jsonl())
+
+                    if id2 not in seen_hashes:
+                        seen_hashes.add(id2)
+                        output_file.write(DialogueResult(id=id2, text=text2).to_jsonl())
 
         typer.echo(
             typer.style(
